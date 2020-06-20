@@ -1,119 +1,58 @@
 #! -*- coding: utf-8 -*-
 
 import tensorflow as tf
-from config import *
 import numpy as np
-'''
-inputs是一个形如(batch_size, seq_len, word_size)的张量；
-函数返回一个形如(batch_size, seq_len, position_size)的位置张量。
-'''
-
-
-def Position_Embedding(inputs, position_size):
-    batch_size, seq_len = tf.shape(inputs)[0], tf.shape(inputs)[1]
-    position_j = 1. / tf.pow(10000.,
-                             2 * tf.range(position_size / 2,
-                                          dtype=tf.float32) / position_size)
-    position_j = tf.expand_dims(position_j, 0)
-    position_i = tf.range(tf.cast(seq_len, tf.float32), dtype=tf.float32)
-    position_i = tf.expand_dims(position_i, 1)
-    position_ij = tf.matmul(position_i, position_j)
-    position_ij = tf.concat([tf.cos(position_ij), tf.sin(position_ij)], 1)
-    position_embedding = tf.expand_dims(
-        position_ij, 0) + tf.zeros((batch_size, seq_len, position_size))
-    return position_embedding
-
+from position_embedding import Position_Embedding
+from Mask import Mask
+from Dense import Dense
+from Feed_Forward import feed_forward
+from Multi_Head_Attention import multi_head_attention
+from Conv2D import conv2D
 
 '''
-inputs是一个二阶以上的张量，代表输入序列，比如形如(batch_size, seq_len, input_size)的张量；
-seq_len是一个形如(batch_size,)的张量，代表每个序列的实际长度，多出部分都被忽略；
-mode分为mul和add，mul是指把多出部分全部置零，一般用于全连接层之前；
-add是指把多出部分全部减去一个大的常数，一般用于softmax之前。
+Factorized Dense Synthesizer的实现
 '''
 
+def Factorized_Dense_Synthesizer(X, V, nb_head,a,b,
+                      size_per_head,initialzer=None,
+                      keep_rate=None,is_trainning=None,
+                      activation='relu',X_len=None,V_len=None):
 
-def Mask(inputs, seq_len, mode='mul'):
-    if seq_len is None:
-        return inputs
-    else:
-        mask = tf.cast(tf.sequence_mask(seq_len, truncature_len), tf.float32)
-        for _ in range(len(inputs.shape) - 2):
-            mask = tf.expand_dims(mask, 2)
-        if mode == 'mul':
-            return inputs * mask
-        if mode == 'add':
-            return inputs - (1 - mask) * 1e12
-
-
-'''
-普通的全连接
-inputs是一个二阶或二阶以上的张量，即形如(batch_size,...,input_size)。
-只对最后一个维度做矩阵乘法，即输出一个形如(batch_size,...,ouput_size)的张量。
-'''
-
-
-def Dense(
-        inputs,
-        output_size,
-        initializer=None,
-        keep_rate=None,
-        is_trainning=True,
-        activition='relu',
-        bias=False):
-
-    outputs = tf.layers.dense(
-        inputs=inputs,
-        units=output_size,
-        use_bias=bias,
-        kernel_initializer=initializer)
-    # outputs = tf.layers.batch_normalization(outputs,training=is_trainning)
-    if activition is 'relu':
-        outputs = tf.nn.relu(outputs)
-    elif activition is 'leaky_relu':
-        outputs = tf.nn.leaky_relu(outputs)
-    elif activition is 'sigmoid':
-        outputs = tf.nn.sigmoid(outputs)
-    if keep_rate is not None:
-        outputs = tf.nn.dropout(outputs, keep_prob=keep_rate)
-    return outputs
-
-
-'''
-Multi-Head Attention的实现
-'''
-
-
-def multi_head_attention(
-        Q,
-        K,
-        V,
-        nb_head,
-        size_per_head,
-        initialzer=None,
-        keep_rate=None,
-        is_trainning=None,
-        activation='relu',
-        Q_len=None,
-        V_len=None):
-    # 对Q、K、V分别作线性映射
-    query = Dense(inputs=Q,
-                  output_size=nb_head * size_per_head,
+    B_1 = Dense(inputs=X,
+                  output_size=b,
                   keep_rate=keep_rate,
                   is_trainning=is_trainning,
                   initializer=initialzer,
                   activition=activation,
-                  bias=False)
-    query = tf.reshape(query, (-1, tf.shape(query)[1], nb_head, size_per_head))
-    query = tf.transpose(query, [0, 2, 1, 3])
-    key = Dense(inputs=K,
-                output_size=nb_head * size_per_head,
+                  bias=True)
+    B_1 = Dense(inputs=B_1,
+              output_size=b,
+              keep_rate=keep_rate,
+              is_trainning=is_trainning,
+              initializer=initialzer,
+              activition=None,
+              bias=True)
+
+    A_1 = Dense(inputs=X,
+                output_size=a,
                 keep_rate=keep_rate,
                 is_trainning=is_trainning,
                 initializer=initialzer,
                 activition=activation,
-                bias=False)
-    key = tf.reshape(key, (-1, tf.shape(key)[1], nb_head, size_per_head))
-    key = tf.transpose(key, [0, 2, 1, 3])
+                bias=True)
+    A_1 = Dense(inputs=A_1,
+                output_size=a,
+                keep_rate=keep_rate,
+                is_trainning=is_trainning,
+                initializer=initialzer,
+                activition=None,
+                bias=True)
+    B_1 = tf.tile(B_1,[1,1,a])
+    A_1 = tf.tile(A_1,[1,1,b])
+    AB = tf.multiply(A_1,B_1)
+    X = tf.reshape(AB, (-1, tf.shape(X)[1], nb_head, size_per_head))
+    X = tf.transpose(X, [0, 2, 1, 3])
+
     value = Dense(inputs=V,
                   output_size=nb_head * size_per_head,
                   keep_rate=keep_rate,
@@ -124,40 +63,17 @@ def multi_head_attention(
     value = tf.reshape(value, (-1, tf.shape(value)[1], nb_head, size_per_head))
     value = tf.transpose(value, [0, 2, 1, 3])
     # 计算内积，然后mask，然后softmax
-    A = tf.matmul(query, key, transpose_b=True) / tf.sqrt(float(size_per_head))
-    A = tf.transpose(A, [0, 3, 2, 1])
-    A = Mask(A, V_len, mode='add')
-    A = tf.transpose(A, [0, 3, 2, 1])
-    A = tf.nn.softmax(A)
+    B = X / tf.sqrt(float(size_per_head))
+    B = tf.transpose(B, [0, 3, 2, 1])
+    B = Mask(B, V_len, 'add')
+    B = tf.transpose(B, [0, 3, 2, 1])
+    B = tf.nn.softmax(B)
     # 输出并mask
-    output = tf.matmul(A, value)
+    output = tf.matmul(B, value)
     output = tf.transpose(output, [0, 2, 1, 3])
-    output = tf.reshape(
-        output, (-1, tf.shape(output)[1], nb_head * size_per_head))
-    output = Mask(output, Q_len, 'mul')
+    output = tf.reshape(output, (-1, tf.shape(output)[1], nb_head * size_per_head))
+    output = Mask(output, X_len, 'mul')
     return output
-
-
-def feed_forward(
-        inputs,
-        initializer=None,
-        keep_rate=None,
-        is_training=True,
-        activition='relu'):
-    shapes = int(inputs.shape[-1])
-    dense = Dense(inputs=inputs,
-                  output_size=shapes * 2,
-                  initializer=initializer,
-                  keep_rate=keep_rate,
-                  is_trainning=is_training,
-                  activition=activition)
-    dense = Dense(inputs=dense,
-                  output_size=shapes,
-                  initializer=initializer,
-                  keep_rate=keep_rate,
-                  is_trainning=is_training,
-                  activition=activition)
-    return dense
 
 
 '''
@@ -189,8 +105,7 @@ def encoder(
                 Q=batch,
                 K=batch,
                 V=batch,
-                nb_head=np.shape(batch)[2] //
-                size_per_head,
+                nb_head=np.shape(batch)[2] //size_per_head,
                 size_per_head=size_per_head,
                 initialzer=initializer,
                 keep_rate=keep_rate,
@@ -207,79 +122,9 @@ def encoder(
                                     is_training=training,
                                     activition=activition)
             add_layer_2 = tf.add(ln_layer_1, ff_layer)
-            batch = layer_norm(
-                add_layer_2,
-                scope=name +
-                '_lnlayer_2_' +
-                str(i))
+            batch = layer_norm(add_layer_2,scope=name +'_lnlayer_2_' +str(i))
 
         return batch
-
-
-def conv2D(
-        inputs,
-        kernel_shape,
-        strides,
-        padding,
-        kernel_name,
-        training,
-        activation='relu',
-        dropuot_rate=None):
-    kernel = tf.get_variable(
-        dtype=tf.float32,
-        shape=kernel_shape,
-        name=kernel_name,
-        regularizer=tf.contrib.layers.l2_regularizer(10e-6),
-        initializer=tf.contrib.layers.xavier_initializer())
-    conv_output = tf.nn.conv2d(
-        input=inputs,
-        filter=kernel,
-        strides=strides,
-        padding=padding)
-    conv_output = tf.layers.batch_normalization(
-        inputs=conv_output, training=training)
-    if activation is 'relu':
-        conv_output = tf.nn.relu(conv_output)
-    elif activation is 'leaky_relu':
-        conv_output = tf.nn.leaky_relu(conv_output)
-    if dropuot_rate is not None:
-        conv_output = tf.nn.dropout(conv_output, keep_prob=dropuot_rate)
-    return conv_output
-
-
-def dense_block(input, nb_layer, strides, keep_rate, training, padding, name):
-    x = input
-    for i in range(nb_layer):
-        conv_out = conv2D(inputs=x,
-                          kernel_shape=[3, 3, x.shape[3], 32],
-                          strides=strides,
-                          padding=padding,
-                          dropuot_rate=keep_rate,
-                          kernel_name=name + 'kernel' + str(i),
-                          training=training)
-        x = tf.concat([x, conv_out], axis=-1)
-    return x
-
-
-def transition_block(
-        input,
-        output_channel,
-        keep_rate,
-        padding,
-        training,
-        kernel_name):
-    x = conv2D(inputs=input,
-               kernel_shape=[1, 1, input.shape[3], output_channel],
-               strides=[1, 1, 1, 1],
-               padding=padding,
-               dropuot_rate=keep_rate,
-               kernel_name=kernel_name + 'kernel',
-               training=training)
-    x_output = tf.nn.max_pool(
-        value=x, ksize=[
-            1, 2, 2, 1], strides=[
-            1, 2, 2, 1], padding=padding)
-    return x_output
 
 
 def Xavier_initializer(node_in, node_out):
