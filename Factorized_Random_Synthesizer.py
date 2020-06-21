@@ -5,47 +5,29 @@ from Mask import Mask
 from Dense import Dense
 
 '''
-Factorized Dense Synthesizer的实现
+Random Synthesizer的实现
 '''
 
-def Factorized_Dense_Synthesizer(R, V, nb_head,a,b,
+def Random_Synthesizer(name,V, nb_head,a,b,
                       size_per_head,initialzer=None,
                       keep_rate=None,is_trainning=None,
                       activation='relu',X_len=None,V_len=None):
 
-    B = Dense(inputs=R,
-                  output_size=b,
-                  keep_rate=keep_rate,
-                  is_trainning=is_trainning,
-                  initializer=initialzer,
-                  activition=activation,
-                  bias=True)
-    B = Dense(inputs=B,
-              output_size=b,
-              keep_rate=keep_rate,
-              is_trainning=is_trainning,
-              initializer=initialzer,
-              activition=None,
-              bias=True)
+    A = tf.get_variable(name=name+'_a',
+                         shape=[1,tf.shape(V)[1],a],
+                         dtype=tf.float32,
+                         initializer=initialzer,
+                         trainable=True)
+    B = tf.get_variable(name=name+'_b',
+                        shape=[1, tf.shape(V)[1], b],
+                        dtype=tf.float32,
+                        initializer=initialzer,
+                        trainable=True)
 
-    A = Dense(inputs=R,
-                output_size=a,
-                keep_rate=keep_rate,
-                is_trainning=is_trainning,
-                initializer=initialzer,
-                activition=activation,
-                bias=True)
-    A = Dense(inputs=A,
-                output_size=a,
-                keep_rate=keep_rate,
-                is_trainning=is_trainning,
-                initializer=initialzer,
-                activition=None,
-                bias=True)
-    B = tf.tile(B,[1,1,a])
     A = tf.tile(A,[1,1,b])
+    B = tf.tile(B,[1,1,a])
     AB = tf.multiply(A,B)
-    X = tf.reshape(AB, (-1, tf.shape(X)[1], nb_head, size_per_head))
+    X = tf.reshape(AB, (-1, tf.shape(AB)[1], nb_head, size_per_head))
     X = tf.transpose(X, [0, 2, 1, 3])
 
     value = Dense(inputs=V,
