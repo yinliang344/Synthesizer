@@ -9,23 +9,23 @@ Random Synthesizer的实现
 '''
 
 def Random_Synthesizer(name,V, nb_head,
-                      size_per_head,initialzer=None,
+                      size_per_head,initializer=None,
                       keep_rate=None,is_trainning=None,
                       activation='relu',X_len=None,V_len=None):
 
-    AB = tf.get_variable(name=name,
-                         shape=[1,tf.shape(V)[1],nb_head*size_per_head],
+    AB = tf.get_variable(name=name+'_rs',
+                         shape=[1,nb_head*size_per_head,nb_head*nb_head*size_per_head],
                          dtype=tf.float32,
-                         initializer=initialzer,
+                         initializer=initializer,
                          trainable=True)
-    X = tf.reshape(AB, (-1, tf.shape(AB)[1], nb_head, size_per_head))
+    X = tf.reshape(AB, (-1, tf.shape(AB)[1], nb_head, tf.shape(V)[1]))
     X = tf.transpose(X, [0, 2, 1, 3])
 
     value = Dense(inputs=V,
                   output_size=nb_head * size_per_head,
                   keep_rate=keep_rate,
                   is_trainning=is_trainning,
-                  initializer=initialzer,
+                  initializer=initializer,
                   activition=activation,
                   bias=False)
     value = tf.reshape(value, (-1, tf.shape(value)[1], nb_head, size_per_head))

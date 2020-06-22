@@ -8,33 +8,33 @@ from Dense import Dense
 Random Synthesizer的实现
 '''
 
-def Random_Synthesizer(name,V, nb_head,a,b,
-                      size_per_head,initialzer=None,
+def Factorized_Random_Synthesizer(name,V, nb_head,a,b,
+                      size_per_head,initializer=None,
                       keep_rate=None,is_trainning=None,
                       activation='relu',X_len=None,V_len=None):
 
     A = tf.get_variable(name=name+'_a',
-                         shape=[1,tf.shape(V)[1],a],
+                         shape=[1,nb_head*size_per_head,a*nb_head],
                          dtype=tf.float32,
-                         initializer=initialzer,
+                         initializer=initializer,
                          trainable=True)
     B = tf.get_variable(name=name+'_b',
-                        shape=[1, tf.shape(V)[1], b],
+                        shape=[1, nb_head*size_per_head, b*nb_head],
                         dtype=tf.float32,
-                        initializer=initialzer,
+                        initializer=initializer,
                         trainable=True)
 
     A = tf.tile(A,[1,1,b])
     B = tf.tile(B,[1,1,a])
     AB = tf.multiply(A,B)
-    X = tf.reshape(AB, (-1, tf.shape(AB)[1], nb_head, size_per_head))
+    X = tf.reshape(AB, (-1, tf.shape(AB)[1], nb_head, a*b))
     X = tf.transpose(X, [0, 2, 1, 3])
 
     value = Dense(inputs=V,
                   output_size=nb_head * size_per_head,
                   keep_rate=keep_rate,
                   is_trainning=is_trainning,
-                  initializer=initialzer,
+                  initializer=initializer,
                   activition=activation,
                   bias=False)
     value = tf.reshape(value, (-1, tf.shape(value)[1], nb_head, size_per_head))

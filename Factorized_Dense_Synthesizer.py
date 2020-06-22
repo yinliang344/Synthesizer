@@ -9,7 +9,7 @@ Factorized Dense Synthesizer的实现
 '''
 
 def Factorized_Dense_Synthesizer(R, V, nb_head,a,b,
-                      size_per_head,initialzer=None,
+                      size_per_head,initializer=None,
                       keep_rate=None,is_trainning=None,
                       activation='relu',X_len=None,V_len=None):
 
@@ -17,14 +17,14 @@ def Factorized_Dense_Synthesizer(R, V, nb_head,a,b,
                   output_size=b,
                   keep_rate=keep_rate,
                   is_trainning=is_trainning,
-                  initializer=initialzer,
+                  initializer=initializer,
                   activition=activation,
                   bias=True)
     B = Dense(inputs=B,
-              output_size=b,
+              output_size=b*nb_head,
               keep_rate=keep_rate,
               is_trainning=is_trainning,
-              initializer=initialzer,
+              initializer=initializer,
               activition=None,
               bias=True)
 
@@ -32,27 +32,27 @@ def Factorized_Dense_Synthesizer(R, V, nb_head,a,b,
                 output_size=a,
                 keep_rate=keep_rate,
                 is_trainning=is_trainning,
-                initializer=initialzer,
+                initializer=initializer,
                 activition=activation,
                 bias=True)
     A = Dense(inputs=A,
-                output_size=a,
+                output_size=a*nb_head,
                 keep_rate=keep_rate,
                 is_trainning=is_trainning,
-                initializer=initialzer,
+                initializer=initializer,
                 activition=None,
                 bias=True)
     B = tf.tile(B,[1,1,a])
     A = tf.tile(A,[1,1,b])
     AB = tf.multiply(A,B)
-    X = tf.reshape(AB, (-1, tf.shape(X)[1], nb_head, size_per_head))
+    X = tf.reshape(AB, (-1, tf.shape(AB)[1], nb_head, a*b))
     X = tf.transpose(X, [0, 2, 1, 3])
 
     value = Dense(inputs=V,
                   output_size=nb_head * size_per_head,
                   keep_rate=keep_rate,
                   is_trainning=is_trainning,
-                  initializer=initialzer,
+                  initializer=initializer,
                   activition=activation,
                   bias=False)
     value = tf.reshape(value, (-1, tf.shape(value)[1], nb_head, size_per_head))

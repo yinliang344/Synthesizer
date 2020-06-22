@@ -21,14 +21,15 @@ def Dense_Synthesizer(R, V, nb_head,
                   initializer=initialzer,
                   activition=activation,
                   bias=True)
+    # print(tf.shape(R)[1])
     B = Dense(inputs=B,
-              output_size=nb_head * size_per_head,
+              output_size=nb_head * nb_head*size_per_head,
               keep_rate=keep_rate,
               is_trainning=is_trainning,
               initializer=initialzer,
               activition=None,
               bias=True)
-    X = tf.reshape(B, (-1, tf.shape(X)[1], nb_head, size_per_head))
+    X = tf.reshape(B, (-1, tf.shape(B)[1], nb_head, tf.shape(R)[1]))
     X = tf.transpose(X, [0, 2, 1, 3])
 
     value = Dense(inputs=V,

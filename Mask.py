@@ -10,7 +10,7 @@ mode分为mul和add，mul是指把多出部分全部置零，一般用于全连�
 add是指把多出部分全部减去一个大的常数，一般用于softmax之前。
 '''
 
-def Mask(inputs, seq_true_len,truncature_len, mode='mul'):
+def Mask(inputs, seq_true_len=None,truncature_len=None, mode='mul'):
     if seq_true_len is None:
         return inputs
     else:
